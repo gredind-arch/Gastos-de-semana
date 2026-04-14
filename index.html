@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Logística Pajilla Pro</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%232c3e50%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2270%22 x=%2210%22>🔐🚛</text></svg>">
+    <style>
+        body { font-family: sans-serif; background: #f4f7f6; padding: 10px; margin: 0; color: #333; }
+        .container { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+        h1 { text-align: center; color: #2c3e50; font-size: 1.1rem; border-bottom: 3px solid #27ae60; padding-bottom: 8px; }
+        label { font-size: 11px; font-weight: bold; color: #666; display: block; margin-top: 8px; }
+        input, select, button { width: 100%; padding: 12px; margin: 4px 0 10px 0; border-radius: 8px; border: 1px solid #ccc; box-sizing: border-box; font-size: 15px; }
+        button { background: #27ae60; color: white; font-weight: bold; border: none; cursor: pointer; }
+        .truck-box { background: #eef2f3; padding: 10px; border-radius: 8px; border-left: 5px solid #2c3e50; margin-bottom: 15px; }
+        .semana-card { margin-top: 15px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white; }
+        .semana-header { background: #2c3e50; color: white; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        th, td { padding: 8px 4px; text-align: left; border-bottom: 1px solid #eee; }
+        .neto-pos { color: #27ae60; font-weight: bold; }
+        .neto-neg { color: #c0392b; font-weight: bold; }
+        .resumen { background: #f8f9fa; padding: 10px; text-align: right; font-weight: bold; border-top: 1px solid #ddd; }
+        .btn-pdf { background: #3498db; width: auto; padding: 4px 8px; font-size: 10px; border-radius: 4px; }
+        .btn-del { background: #e74c3c; width: auto; padding: 4px 8px; font-size: 10px; color: white; border-radius: 4px; border: none; }
+        #app-content { display: none; }
+        @media print { .no-print, h1, input, select, button { display: none !important; } .container { width: 100%; max-width: none; box-shadow: none; } }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="container">
+        <h2>🔑 Acceso</h2>
+        <input type="password" id="pass-input" placeholder="Tu clave">
+        <button onclick="checkPass()">ENTRAR</button>
+    </div>
+
+    <div id="app-content" class="container">
+        <h1>🚛 Logística Pajilla Pro</h1>
+
+        <div class="truck-box no-print">
+            <label>Camión Seleccionado:</label>
+            <select id="select-camion" onchange="cambiarCamion()"></select>
+            <button style="background: #34495e; padding: 8px; font-size: 12px;" onclick="nuevoCamion()">+ Agregar Camión</button>
+        </div>
+
+        <div class="no-print">
+            <label>Fecha:</label>
+            <input type="date" id="fecha">
+            <input type="text" id="desc" placeholder="Ruta / Descripción">
+            <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label>Monto Total $:</label>
+                    <input type="number" id="monto" placeholder="0.00">
+                </div>
+                <div style="flex: 1;">
+                    <label>Deducción de la carga %:</label>
+                    <input type="number" id="porcentaje" value="18">
+                </div>
+            </div>
+            <select id="tipo">
+                <option value="viaje">Registrar como Viaje</option>
+                <option value="gasto">Registrar como Gasto</option>
+            </select>
+            <button onclick="registrar()">💾 GUARDAR</button>
+        </div>
+
+        <div id="contenedor-tablas"></div>
+        <button class="no-print" style="background:#95a5a6; margin-top:20px; font-size:11px;" onclick="location.reload()">🔒 CERRAR SESIÓN</button>
+    </div>
+
+    <script>
+        // Versión 6 para asegurar limpieza de errores previos
+        let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
+        let savedPass = localStorage.getItem('pj_pass_v6');
+
+        function checkPass() {
+            let i = document.getElementById('pass-input').value;
+            if (!savedPass) { localStorage.setItem('pj_pass_v6', i); savedPass = i; }
+            if (i === savedPass) {
+                document.getElementById('login-screen').style.display = 'none';
+                document.getElementById('app-content').style.display = 'block';
+                actualizarSelector(); render();
+            } else { alert("Clave Incorrecta"); }
+        }
+
+        function actualizarSelector() {
+            let s = document.getElementById('select-camion'); s.innerHTML = "";
+            Object.keys(db.c).forEach(n => {
+                let o = document.createElement('option'); o.value = n; o.innerText = n;
+                if(n === db.sel) o.selected = true; s.appendChild(o);
+            });
+        }
+
+        function nuevoCamion() {
+            let n = prompt("Nombre del Camión:");
+            if (n && !db.c[n]) { db.c[n] = []; db.sel = n; save(); actualizarSelector(); render(); }
+        }
+
+        function cambiarCamion() { db.sel = document.getElementById('select-camion').value; save(); render(); }
+
+        function registrar() {
+            let f = document.getElementById('fecha').value, d = document.getElementById('desc').value, m = parseFloat(document.getElementById('monto').value), p = parseFloat(document.getElementById('porcentaje').value), t = document.getElementById('tipo').value;
+            if(!f || !d || isNaN(m)) return alert("Completa los datos");
+            
+            let dObj = new Date(f + 'T00:00:00');
+            dObj.setDate(dObj.getDate() - (dObj.getDay() === 0 ? 6 : dObj.getDay() - 1));
+            let sid = dObj.toISOString().split('T')[0];
+
+            db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid });
+            save(); document.getElementById('desc').value = ''; document.getElementById('monto').value = ''; render();
+        }
+
+        function borrar(id) {
+            if(confirm('¿Borrar?')) { db.c[db.sel] = db.c[db.sel].filter(r => r.id !== id); save(); render(); }
+        }
+
+        function save() { localStorage.setItem('pj_db_v6', JSON.stringify(db)); }
+        function fmt(f) { let p = f.split('-'); return p[1] + '/' + p[2] + '/' + p[0]; }
+
+        function render() {
+            let cont = document.getElementById('contenedor-tablas'); cont.innerHTML = '';
+            let regs = db.c[db.sel] || [];
+            let grupos = {};
+            regs.forEach(r => { if(!grupos[r.sid]) grupos[r.sid] = []; grupos[r.sid].push(r); });
+
+            Object.keys(grupos).sort().reverse().forEach(sid => {
+                let total = 0;
+                let tabla = `<table><tr><th>Fecha</th><th>Desc.</th><th>Neto</th><th class="no-print"></th></tr>`;
+                grupos[sid].sort((a,b) => new Date(a.f) - new Date(b.f)).forEach(r => {
+                    let n = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
+                    total += n;
+                    tabla += `<tr><td>${fmt(r.f)}</td><td>${r.d} ${r.t=='viaje'?'('+r.p+'%)':''}</td><td class="${n<0?'neto-neg':'neto-pos'}">$${Math.abs(n).toFixed(2)}</td><td class="no-print"><button class="btn-del" onclick="borrar(${r.id})">X</button></td></tr>`;
+                });
+                let div = document.createElement('div');
+                div.className = 'semana-card';
+                div.innerHTML = `<div class="semana-header"><span>Semana del ${fmt(sid)}</span><button class="btn-pdf" onclick="window.print()">PDF</button></div>${tabla}</table><div class="resumen">Saldo: $${total.toFixed(2)}</div>`;
+                cont.appendChild(div);
+            });
+        }
+        document.getElementById('fecha').valueAsDate = new Date();
+    </script>
+</body>
+</html>
