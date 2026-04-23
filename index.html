@@ -4,9 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Logística Pajilla Pro</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Logística Pajilla">
+    <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%232c3e50%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2270%22 x=%2210%22>🚛</text></svg>">
+
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%232c3e50%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2270%22 x=%2210%22>🔐🚛</text></svg>">
+    
     <style>
-        body { font-family: sans-serif; background: #f4f7f6; padding: 10px; margin: 0; color: #333; }
+        body { font-family: sans-serif; background: #f4f7f6; padding: 10px; margin: 0; color: #333; padding-top: env(safe-area-inset-top); }
         .container { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
         h1 { text-align: center; color: #2c3e50; font-size: 1.1rem; border-bottom: 3px solid #27ae60; padding-bottom: 8px; }
         label { font-size: 11px; font-weight: bold; color: #666; display: block; margin-top: 8px; }
@@ -48,16 +55,16 @@
         </div>
 
         <div class="no-print">
-            <label>Tipo de Registro:</label>
+            <label>Acción:</label>
             <select id="tipo" onchange="toggleInputs()">
-                <option value="viaje">Registrar como Viaje</option>
-                <option value="gasto">Registrar como Gasto</option>
+                <option value="viaje">Ingresar Viaje</option>
+                <option value="gasto">Ingresar Gasto</option>
             </select>
 
             <label>Fecha:</label>
             <input type="date" id="fecha">
             
-            <label id="label-desc">Ruta:</label>
+            <label id="label-desc">Ruta del Viaje:</label>
             <input type="text" id="desc" placeholder="Escriba aquí...">
 
             <div style="display: flex; gap: 10px;">
@@ -75,11 +82,19 @@
         </div>
 
         <div id="contenedor-tablas"></div>
-        <button class="no-print" style="background:#95a5a6; margin-top:20px; font-size:11px;" onclick="location.reload()">🔒 CERRAR SESIÓN</button>
+
+        <div class="no-print" style="margin-top: 20px; border-top: 1px solid #ddd; padding-top: 10px;">
+            <label>Opciones de Datos:</label>
+            <div style="display: flex; gap: 5px;">
+                <button style="background:#2980b9; font-size:10px; flex:1;" onclick="exportarDatos()">📥 DESCARGAR RESPALDO</button>
+                <button style="background:#8e44ad; font-size:10px; flex:1;" onclick="document.getElementById('importFile').click()">📤 SUBIR RESPALDO</button>
+                <input type="file" id="importFile" class="hidden" onchange="importarDatos(this)">
+            </div>
+            <button style="background:#95a5a6; margin-top:10px; font-size:11px;" onclick="location.reload()">🔒 CERRAR SESIÓN</button>
+        </div>
     </div>
 
     <script>
-        // Mantenemos la misma llave de base de datos para no perder los datos actuales
         let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
         let savedPass = localStorage.getItem('pj_pass_v6');
 
@@ -97,10 +112,9 @@
             const tipo = document.getElementById('tipo').value;
             const colPorcentaje = document.getElementById('col-porcentaje');
             const labelDesc = document.getElementById('label-desc');
-            
             if(tipo === 'viaje') {
                 colPorcentaje.classList.remove('hidden');
-                labelDesc.innerText = "Ingresar Ruta:";
+                labelDesc.innerText = "Ruta del Viaje:";
             } else {
                 colPorcentaje.classList.add('hidden');
                 labelDesc.innerText = "Descripción del Gasto:";
@@ -114,7 +128,6 @@
                 let o = document.createElement('option'); o.value = n; o.innerText = n;
                 if(n === db.sel) o.selected = true; s.appendChild(o);
             });
-            // Ocultar botón borrar si solo queda una cuenta
             document.getElementById('btn-borrar-cuenta').style.display = keys.length > 1 ? 'block' : 'none';
         }
 
@@ -124,7 +137,7 @@
         }
 
         function borrarCamion() {
-            if(confirm(`¿Estás seguro de eliminar la cuenta "${db.sel}" y todos sus registros?`)) {
+            if(confirm(`¿Eliminar cuenta "${db.sel}"?`)) {
                 delete db.c[db.sel];
                 db.sel = Object.keys(db.c)[0];
                 save(); actualizarSelector(); render();
@@ -136,12 +149,9 @@
         function registrar() {
             let f = document.getElementById('fecha').value, d = document.getElementById('desc').value, m = parseFloat(document.getElementById('monto').value), p = parseFloat(document.getElementById('porcentaje').value), t = document.getElementById('tipo').value;
             if(!f || !d || isNaN(m)) return alert("Completa los datos");
-            
             let dObj = new Date(f + 'T00:00:00');
-            // Calcular lunes de esa semana
             dObj.setDate(dObj.getDate() - (dObj.getDay() === 0 ? 6 : dObj.getDay() - 1));
             let sid = dObj.toISOString().split('T')[0];
-
             db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid });
             save(); document.getElementById('desc').value = ''; document.getElementById('monto').value = ''; render();
         }
@@ -151,12 +161,7 @@
         }
 
         function save() { localStorage.setItem('pj_db_v6', JSON.stringify(db)); }
-        
-        function fmt(f) { 
-            let p = f.split('-'); 
-            return p[1] + '/' + p[2] + '/' + p[0]; 
-        }
-
+        function fmt(f) { let p = f.split('-'); return p[1] + '/' + p[2] + '/' + p[0]; }
         function getFinSemana(fechaInicio) {
             let d = new Date(fechaInicio + 'T00:00:00');
             d.setDate(d.getDate() + 6);
@@ -168,29 +173,40 @@
             let regs = db.c[db.sel] || [];
             let grupos = {};
             regs.forEach(r => { if(!grupos[r.sid]) grupos[r.sid] = []; grupos[r.sid].push(r); });
-
             Object.keys(grupos).sort().reverse().forEach(sid => {
                 let total = 0;
                 let fechaFin = getFinSemana(sid);
                 let tabla = `<table><tr><th>Fecha</th><th>Desc./Ruta</th><th>Neto</th><th class="no-print"></th></tr>`;
-                
                 grupos[sid].sort((a,b) => new Date(a.f) - new Date(b.f)).forEach(r => {
                     let n = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
                     total += n;
                     tabla += `<tr><td>${fmt(r.f)}</td><td>${r.d} ${r.t=='viaje'?'('+r.p+'%)':''}</td><td class="${n<0?'neto-neg':'neto-pos'}">$${Math.abs(n).toFixed(2)}</td><td class="no-print"><button class="btn-del" onclick="borrar(${r.id})">X</button></td></tr>`;
                 });
-
                 let div = document.createElement('div');
                 div.className = 'semana-card';
-                div.innerHTML = `
-                    <div class="semana-header">
-                        <span>Del ${fmt(sid)} al ${fmt(fechaFin)}</span>
-                        <button class="btn-pdf" onclick="window.print()">PDF</button>
-                    </div>
-                    ${tabla}</table>
-                    <div class="resumen">Saldo Neto: $${total.toFixed(2)}</div>`;
+                div.innerHTML = `<div class="semana-header"><span>Del ${fmt(sid)} al ${fmt(fechaFin)}</span><button class="btn-pdf" onclick="window.print()">PDF</button></div>${tabla}</table><div class="resumen">Saldo Neto: $${total.toFixed(2)}</div>`;
                 cont.appendChild(div);
             });
+        }
+
+        function exportarDatos() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const dlAnchorElem = document.createElement('a');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "respaldo_logistica.json");
+            dlAnchorElem.click();
+        }
+
+        function importarDatos(input) {
+            const reader = new FileReader();
+            reader.onload = function(){
+                try {
+                    db = JSON.parse(reader.result);
+                    save(); actualizarSelector(); render();
+                    alert("Respaldo cargado con éxito");
+                } catch(e) { alert("Archivo no válido"); }
+            };
+            reader.readAsText(input.files[0]);
         }
         document.getElementById('fecha').valueAsDate = new Date();
     </script>
