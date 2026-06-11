@@ -29,18 +29,11 @@
         .resumen { background: #f8f9fa; padding: 10px; text-align: right; font-weight: bold; border-top: 1px solid #ddd; }
         .btn-pdf { background: #3498db; width: auto; padding: 4px 8px; font-size: 10px; border-radius: 4px; }
         .btn-del { background: #e74c3c; width: auto; padding: 4px 8px; font-size: 10px; color: white; border-radius: 4px; border: none; }
-        #app-content { display: none; }
         .hidden { display: none; }
         @media print { .no-print, h1, input, select, button { display: none !important; } .container { width: 100%; max-width: none; box-shadow: none; } }
     </style>
 </head>
 <body>
-
-    <div id="login-screen" class="container">
-        <h2>🔑 Acceso</h2>
-        <input type="password" id="pass-input" placeholder="Tu clave">
-        <button onclick="checkPass()">ENTRAR</button>
-    </div>
 
     <div id="app-content" class="container">
         <h1>🚛 Logística Pajilla Pro</h1>
@@ -90,23 +83,19 @@
                 <button style="background:#8e44ad; font-size:10px; flex:1;" onclick="document.getElementById('importFile').click()">📤 SUBIR RESPALDO</button>
                 <input type="file" id="importFile" class="hidden" onchange="importarDatos(this)">
             </div>
-            <button style="background:#95a5a6; margin-top:10px; font-size:11px;" onclick="location.reload()">🔒 CERRAR SESIÓN</button>
         </div>
     </div>
 
     <script>
         let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
-        let savedPass = localStorage.getItem('pj_pass_v6');
 
-        function checkPass() {
-            let i = document.getElementById('pass-input').value;
-            if (!savedPass) { localStorage.setItem('pj_pass_v6', i); savedPass = i; }
-            if (i === savedPass) {
-                document.getElementById('login-screen').style.display = 'none';
-                document.getElementById('app-content').style.display = 'block';
-                actualizarSelector(); toggleInputs(); render();
-            } else { alert("Clave Incorrecta"); }
-        }
+        // Inicialización automática
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('fecha').valueAsDate = new Date();
+            actualizarSelector();
+            toggleInputs();
+            render();
+        });
 
         function toggleInputs() {
             const tipo = document.getElementById('tipo').value;
@@ -208,7 +197,6 @@
             };
             reader.readAsText(input.files[0]);
         }
-        document.getElementById('fecha').valueAsDate = new Date();
     </script>
 </body>
 </html>
