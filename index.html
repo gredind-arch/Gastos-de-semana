@@ -3,15 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Logística Pajilla Pro</title>
+    <title>Logística de viajes pajilla</title>
     
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Logística Pajilla">
     <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%232c3e50%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2270%22 x=%2210%22>🚛</text></svg>">
-
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%232c3e50%22 rx=%2220%22/><text y=%22.9em%22 font-size=%2270%22 x=%2210%22>🔐🚛</text></svg>">
     
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         body { font-family: sans-serif; background: #f4f7f6; padding: 10px; margin: 0; color: #333; padding-top: env(safe-area-inset-top); }
         .container { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
@@ -30,13 +31,14 @@
         .btn-pdf { background: #3498db; width: auto; padding: 4px 8px; font-size: 10px; border-radius: 4px; }
         .btn-del { background: #e74c3c; width: auto; padding: 4px 8px; font-size: 10px; color: white; border-radius: 4px; border: none; }
         .hidden { display: none; }
+        .report-box { background: #fcf3cf; padding: 10px; border-radius: 8px; border-left: 5px solid #f1c40f; margin-top: 20px; }
         @media print { .no-print, h1, input, select, button { display: none !important; } .container { width: 100%; max-width: none; box-shadow: none; } }
     </style>
 </head>
 <body>
 
     <div id="app-content" class="container">
-        <h1>🚛 Logística Pajilla Pro</h1>
+        <h1>🚛 Logística de viajes pajilla</h1>
 
         <div class="truck-box no-print">
             <label>Cuenta Seleccionada:</label>
@@ -56,6 +58,14 @@
 
             <label>Fecha:</label>
             <input type="date" id="fecha">
+
+            <label id="label-cat-gasto" class="hidden">Categoría del Gasto:</label>
+            <select id="cat-gasto" class="hidden">
+                <option value="Diésel">Diésel</option>
+                <option value="Mantenimiento">Mantenimiento</option>
+                <option value="Peajes">Peajes / Tolls</option>
+                <option value="Otros">Otros Gastos</option>
+            </select>
             
             <label id="label-desc">Ruta del Viaje:</label>
             <input type="text" id="desc" placeholder="Escriba aquí...">
@@ -73,6 +83,29 @@
             
             <button onclick="registrar()">💾 GUARDAR</button>
         </div>
+        
+        <div class="report-box no-print">
+            <h3 style="margin-top: 0; font-size: 14px; text-align: center;">📊 Reporte de Rendimiento</h3>
+            <div style="display: flex; gap: 5px;">
+                <div style="flex: 1;">
+                    <label>Desde:</label>
+                    <input type="date" id="rep-inicio">
+                </div>
+                <div style="flex: 1;">
+                    <label>Hasta:</label>
+                    <input type="date" id="rep-fin">
+                </div>
+            </div>
+            <button style="background: #f39c12;" onclick="generarReporte()">Generar Gráfico</button>
+
+            <div id="resumen-reporte" style="margin-top: 15px; font-size: 14px; display: none;">
+                <p><strong>Ingresos Netos (Viajes):</strong> <span id="rep-ingresos" style="color: #27ae60;">$0.00</span></p>
+                <p><strong>Total Gastos:</strong> <span id="rep-gastos" style="color: #c0392b;">$0.00</span></p>
+                <hr>
+                <p><strong>Ganancia Libre:</strong> <span id="rep-libre" style="font-size: 16px; font-weight: bold;">$0.00</span></p>
+                <canvas id="graficoReporte" style="margin-top: 20px; width: 100%;"></canvas>
+            </div>
+        </div>
 
         <div id="contenedor-tablas"></div>
 
@@ -88,10 +121,17 @@
 
     <script>
         let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
+        let chartInstance = null; // Variable para manejar el gráfico
 
         // Inicialización automática
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('fecha').valueAsDate = new Date();
+            // Pre-llenar fechas de reporte para el mes actual
+            let hoy = new Date();
+            let primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+            document.getElementById('rep-inicio').valueAsDate = primerDia;
+            document.getElementById('rep-fin').valueAsDate = hoy;
+
             actualizarSelector();
             toggleInputs();
             render();
@@ -101,11 +141,18 @@
             const tipo = document.getElementById('tipo').value;
             const colPorcentaje = document.getElementById('col-porcentaje');
             const labelDesc = document.getElementById('label-desc');
+            const catGasto = document.getElementById('cat-gasto');
+            const labelCatGasto = document.getElementById('label-cat-gasto');
+
             if(tipo === 'viaje') {
                 colPorcentaje.classList.remove('hidden');
+                catGasto.classList.add('hidden');
+                labelCatGasto.classList.add('hidden');
                 labelDesc.innerText = "Ruta del Viaje:";
             } else {
                 colPorcentaje.classList.add('hidden');
+                catGasto.classList.remove('hidden');
+                labelCatGasto.classList.remove('hidden');
                 labelDesc.innerText = "Descripción del Gasto:";
             }
         }
@@ -136,13 +183,26 @@
         function cambiarCamion() { db.sel = document.getElementById('select-camion').value; save(); render(); }
 
         function registrar() {
-            let f = document.getElementById('fecha').value, d = document.getElementById('desc').value, m = parseFloat(document.getElementById('monto').value), p = parseFloat(document.getElementById('porcentaje').value), t = document.getElementById('tipo').value;
+            let f = document.getElementById('fecha').value;
+            let d = document.getElementById('desc').value;
+            let m = parseFloat(document.getElementById('monto').value);
+            let p = parseFloat(document.getElementById('porcentaje').value);
+            let t = document.getElementById('tipo').value;
+            let c = document.getElementById('cat-gasto').value;
+
             if(!f || !d || isNaN(m)) return alert("Completa los datos");
+            
             let dObj = new Date(f + 'T00:00:00');
             dObj.setDate(dObj.getDate() - (dObj.getDay() === 0 ? 6 : dObj.getDay() - 1));
             let sid = dObj.toISOString().split('T')[0];
-            db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid });
-            save(); document.getElementById('desc').value = ''; document.getElementById('monto').value = ''; render();
+            
+            // Guardamos la categoría solo si es gasto
+            db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid, cat: (t === 'gasto' ? c : '') });
+            
+            save(); 
+            document.getElementById('desc').value = ''; 
+            document.getElementById('monto').value = ''; 
+            render();
         }
 
         function borrar(id) {
@@ -157,6 +217,91 @@
             return d.toISOString().split('T')[0];
         }
 
+        // LÓGICA DEL REPORTE
+        function generarReporte() {
+            let inicio = document.getElementById('rep-inicio').value;
+            let fin = document.getElementById('rep-fin').value;
+
+            if (!inicio || !fin) return alert("Selecciona ambas fechas para generar el reporte.");
+
+            let regs = db.c[db.sel] || [];
+            let ingresosNetos = 0;
+            let totalGastos = 0;
+            let gastosPorCategoria = {};
+
+            regs.forEach(r => {
+                if (r.f >= inicio && r.f <= fin) {
+                    if (r.t === 'viaje') {
+                        ingresosNetos += r.m * ((100 - r.p) / 100);
+                    } else if (r.t === 'gasto') {
+                        totalGastos += r.m;
+                        // Manejo para registros anteriores que no tenían categoría
+                        let categoria = r.cat || 'Otros';
+                        gastosPorCategoria[categoria] = (gastosPorCategoria[categoria] || 0) + r.m;
+                    }
+                }
+            });
+
+            let gananciaLibre = ingresosNetos - totalGastos;
+
+            document.getElementById('rep-ingresos').innerText = "$" + ingresosNetos.toFixed(2);
+            document.getElementById('rep-gastos').innerText = "$" + totalGastos.toFixed(2);
+            
+            let repLibre = document.getElementById('rep-libre');
+            repLibre.innerText = "$" + gananciaLibre.toFixed(2);
+            repLibre.style.color = gananciaLibre >= 0 ? '#27ae60' : '#c0392b';
+
+            document.getElementById('resumen-reporte').style.display = 'block';
+            dibujarGrafico(ingresosNetos, gastosPorCategoria);
+        }
+
+        function dibujarGrafico(ingresos, gastosCat) {
+            let ctx = document.getElementById('graficoReporte').getContext('2d');
+            
+            // Destruir el gráfico anterior si existe para evitar superposiciones
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            let labels = ['Ingresos (Libres)'];
+            let data = [ingresos];
+            let colors = ['#27ae60']; // Verde para ingresos
+
+            for (let cat in gastosCat) {
+                labels.push('Gasto: ' + cat);
+                data.push(gastosCat[cat]);
+                
+                // Asignar colores según la categoría del gasto
+                if (cat === 'Diésel') colors.push('#34495e'); // Azul oscuro
+                else if (cat === 'Mantenimiento') colors.push('#e67e22'); // Naranja
+                else if (cat === 'Peajes') colors.push('#9b59b6'); // Morado
+                else colors.push('#c0392b'); // Rojo para otros
+            }
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Monto en USD ($)',
+                        data: data,
+                        backgroundColor: colors,
+                        borderRadius: 5,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: { beginAtZero: true }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
+            });
+        }
+
         function render() {
             let cont = document.getElementById('contenedor-tablas'); cont.innerHTML = '';
             let regs = db.c[db.sel] || [];
@@ -169,7 +314,14 @@
                 grupos[sid].sort((a,b) => new Date(a.f) - new Date(b.f)).forEach(r => {
                     let n = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
                     total += n;
-                    tabla += `<tr><td>${fmt(r.f)}</td><td>${r.d} ${r.t=='viaje'?'('+r.p+'%)':''}</td><td class="${n<0?'neto-neg':'neto-pos'}">$${Math.abs(n).toFixed(2)}</td><td class="no-print"><button class="btn-del" onclick="borrar(${r.id})">X</button></td></tr>`;
+                    // Mostrar categoría si es un gasto
+                    let extraInfo = r.t === 'viaje' ? '('+r.p+'%)' : (r.cat ? '['+r.cat+']' : '');
+                    tabla += `<tr>
+                                <td>${fmt(r.f)}</td>
+                                <td>${r.d} ${extraInfo}</td>
+                                <td class="${n<0?'neto-neg':'neto-pos'}">$${Math.abs(n).toFixed(2)}</td>
+                                <td class="no-print"><button class="btn-del" onclick="borrar(${r.id})">X</button></td>
+                              </tr>`;
                 });
                 let div = document.createElement('div');
                 div.className = 'semana-card';
