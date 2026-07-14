@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Logística de viajes pajilla</title>
     
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <script>
+        // Cambia este número (ej. "2.1", "2.2") CADA VEZ que subas un cambio a GitHub
+        const APP_VERSION = "2.0"; 
+        
+        let currentVersion = localStorage.getItem('pj_version_app');
+        if (currentVersion !== APP_VERSION) {
+            // Si la versión guardada es diferente, actualiza la marca y recarga la página a la fuerza
+            localStorage.setItem('pj_version_app', APP_VERSION);
+            window.location.reload(true); 
+        }
+    </script>
+    
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Logística Pajilla">
@@ -121,12 +137,13 @@
 
     <script>
         let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
-        let chartInstance = null; // Variable para manejar el gráfico
+        let chartInstance = null; 
 
-        // Inicialización automática
+        // Inicialización automática al cargar la página
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('fecha').valueAsDate = new Date();
-            // Pre-llenar fechas de reporte para el mes actual
+            
+            // Poner las fechas por defecto para el reporte (Mes actual)
             let hoy = new Date();
             let primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
             document.getElementById('rep-inicio').valueAsDate = primerDia;
@@ -196,7 +213,7 @@
             dObj.setDate(dObj.getDate() - (dObj.getDay() === 0 ? 6 : dObj.getDay() - 1));
             let sid = dObj.toISOString().split('T')[0];
             
-            // Guardamos la categoría solo si es gasto
+            // Guardamos el registro con su categoría si corresponde
             db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid, cat: (t === 'gasto' ? c : '') });
             
             save(); 
@@ -217,7 +234,7 @@
             return d.toISOString().split('T')[0];
         }
 
-        // LÓGICA DEL REPORTE
+        // LÓGICA DE FILTRADO POR FECHAS Y GRÁFICOS
         function generarReporte() {
             let inicio = document.getElementById('rep-inicio').value;
             let fin = document.getElementById('rep-fin').value;
@@ -235,7 +252,6 @@
                         ingresosNetos += r.m * ((100 - r.p) / 100);
                     } else if (r.t === 'gasto') {
                         totalGastos += r.m;
-                        // Manejo para registros anteriores que no tenían categoría
                         let categoria = r.cat || 'Otros';
                         gastosPorCategoria[categoria] = (gastosPorCategoria[categoria] || 0) + r.m;
                     }
@@ -258,24 +274,22 @@
         function dibujarGrafico(ingresos, gastosCat) {
             let ctx = document.getElementById('graficoReporte').getContext('2d');
             
-            // Destruir el gráfico anterior si existe para evitar superposiciones
             if (chartInstance) {
-                chartInstance.destroy();
+                chartInstance.destroy(); // Destruye el anterior para evitar parpadeos
             }
 
-            let labels = ['Ingresos (Libres)'];
+            let labels = ['Quedó Libre'];
             let data = [ingresos];
-            let colors = ['#27ae60']; // Verde para ingresos
+            let colors = ['#27ae60']; 
 
             for (let cat in gastosCat) {
                 labels.push('Gasto: ' + cat);
                 data.push(gastosCat[cat]);
                 
-                // Asignar colores según la categoría del gasto
-                if (cat === 'Diésel') colors.push('#34495e'); // Azul oscuro
-                else if (cat === 'Mantenimiento') colors.push('#e67e22'); // Naranja
-                else if (cat === 'Peajes') colors.push('#9b59b6'); // Morado
-                else colors.push('#c0392b'); // Rojo para otros
+                if (cat === 'Diésel') colors.push('#34495e'); 
+                else if (cat === 'Mantenimiento') colors.push('#e67e22'); 
+                else if (cat === 'Peajes') colors.push('#9b59b6'); 
+                else colors.push('#c0392b'); 
             }
 
             chartInstance = new Chart(ctx, {
@@ -314,7 +328,6 @@
                 grupos[sid].sort((a,b) => new Date(a.f) - new Date(b.f)).forEach(r => {
                     let n = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
                     total += n;
-                    // Mostrar categoría si es un gasto
                     let extraInfo = r.t === 'viaje' ? '('+r.p+'%)' : (r.cat ? '['+r.cat+']' : '');
                     tabla += `<tr>
                                 <td>${fmt(r.f)}</td>
