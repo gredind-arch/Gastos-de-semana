@@ -10,12 +10,11 @@
     <meta http-equiv="Expires" content="0">
 
     <script>
-        // Cambia este número (ej. "2.1", "2.2") CADA VEZ que subas un cambio a GitHub
-        const APP_VERSION = "2.0"; 
+        // Versión actualizada para reflejar cambios
+        const APP_VERSION = "2.1"; 
         
         let currentVersion = localStorage.getItem('pj_version_app');
         if (currentVersion !== APP_VERSION) {
-            // Si la versión guardada es diferente, actualiza la marca y recarga la página a la fuerza
             localStorage.setItem('pj_version_app', APP_VERSION);
             window.location.reload(true); 
         }
@@ -39,7 +38,7 @@
         .truck-box { background: #eef2f3; padding: 10px; border-radius: 8px; border-left: 5px solid #2c3e50; margin-bottom: 15px; }
         .semana-card { margin-top: 15px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: white; }
         .semana-header { background: #2c3e50; color: white; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 11px; }
-        table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        table { width: 100%; border-collapse: collapse; font-size: 10px; }
         th, td { padding: 8px 4px; text-align: left; border-bottom: 1px solid #eee; }
         .neto-pos { color: #27ae60; font-weight: bold; }
         .neto-neg { color: #c0392b; font-weight: bold; }
@@ -139,11 +138,8 @@
         let db = JSON.parse(localStorage.getItem('pj_db_v6')) || { c: { "Principal": [] }, sel: "Principal" };
         let chartInstance = null; 
 
-        // Inicialización automática al cargar la página
         document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('fecha').valueAsDate = new Date();
-            
-            // Poner las fechas por defecto para el reporte (Mes actual)
             let hoy = new Date();
             let primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
             document.getElementById('rep-inicio').valueAsDate = primerDia;
@@ -213,7 +209,6 @@
             dObj.setDate(dObj.getDate() - (dObj.getDay() === 0 ? 6 : dObj.getDay() - 1));
             let sid = dObj.toISOString().split('T')[0];
             
-            // Guardamos el registro con su categoría si corresponde
             db.c[db.sel].push({ id: Date.now(), f, d, m, p, t, sid, cat: (t === 'gasto' ? c : '') });
             
             save(); 
@@ -234,7 +229,6 @@
             return d.toISOString().split('T')[0];
         }
 
-        // LÓGICA DE FILTRADO POR FECHAS Y GRÁFICOS
         function generarReporte() {
             let inicio = document.getElementById('rep-inicio').value;
             let fin = document.getElementById('rep-fin').value;
@@ -275,7 +269,7 @@
             let ctx = document.getElementById('graficoReporte').getContext('2d');
             
             if (chartInstance) {
-                chartInstance.destroy(); // Destruye el anterior para evitar parpadeos
+                chartInstance.destroy();
             }
 
             let labels = ['Quedó Libre'];
@@ -321,21 +315,27 @@
             let regs = db.c[db.sel] || [];
             let grupos = {};
             regs.forEach(r => { if(!grupos[r.sid]) grupos[r.sid] = []; grupos[r.sid].push(r); });
+            
             Object.keys(grupos).sort().reverse().forEach(sid => {
                 let total = 0;
                 let fechaFin = getFinSemana(sid);
-                let tabla = `<table><tr><th>Fecha</th><th>Desc./Ruta</th><th>Neto</th><th class="no-print"></th></tr>`;
+                // Columna Bruto agregada
+                let tabla = `<table><tr><th>Fecha</th><th>Desc./Ruta</th><th>Bruto</th><th>Neto</th><th class="no-print"></th></tr>`;
+                
                 grupos[sid].sort((a,b) => new Date(a.f) - new Date(b.f)).forEach(r => {
-                    let n = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
-                    total += n;
+                    let neto = r.t === 'viaje' ? r.m * ((100-r.p)/100) : -r.m;
+                    total += neto;
                     let extraInfo = r.t === 'viaje' ? '('+r.p+'%)' : (r.cat ? '['+r.cat+']' : '');
+                    
                     tabla += `<tr>
                                 <td>${fmt(r.f)}</td>
                                 <td>${r.d} ${extraInfo}</td>
-                                <td class="${n<0?'neto-neg':'neto-pos'}">$${Math.abs(n).toFixed(2)}</td>
+                                <td>$${r.m.toFixed(2)}</td>
+                                <td class="${neto<0?'neto-neg':'neto-pos'}">$${Math.abs(neto).toFixed(2)}</td>
                                 <td class="no-print"><button class="btn-del" onclick="borrar(${r.id})">X</button></td>
                               </tr>`;
                 });
+                
                 let div = document.createElement('div');
                 div.className = 'semana-card';
                 div.innerHTML = `<div class="semana-header"><span>Del ${fmt(sid)} al ${fmt(fechaFin)}</span><button class="btn-pdf" onclick="window.print()">PDF</button></div>${tabla}</table><div class="resumen">Saldo Neto: $${total.toFixed(2)}</div>`;
